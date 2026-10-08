@@ -1,0 +1,34 @@
+# R
+.Rproj.user/
+.Rhistory
+.RData
+*.RData
+.Ruserdata
+*.Rcheck/
+
+# Raw and regenerable data
+data/hbs_data/
+data/eppa_outputs/
+data/processed/
+data/publication_database/
+data/external/**/WiP/
+
+# Outputs: keep only what you add explicitly
+outputs/figures/*
+outputs/tables/*
+!outputs/figures/.gitkeep
+!outputs/tables/.gitkeep
+
+# Manuscript binaries and literature
+manuscript/*.docx
+manuscript/*.pdf
+manuscript/*_files/
+manuscript/*_cache/
+manuscript/submitted_versions/
+docs/literature/pdfs/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.tmp
+~$*
