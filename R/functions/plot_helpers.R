@@ -25,13 +25,14 @@ scale_fill_importance <- function(...) {
   scale_fill_gradient(low = "white", high = "#0b3d91", limits = c(0, NA), ...)
 }
 
-# Save a figure as PDF (editable vector) + PNG (quick look).
+# Save a figure as PNG (add pdf = TRUE for an editable vector copy). `sub` = subfolder of `dir`.
 # Usage: save_fig(p, "03_rf_importance", width = 7, height = 4)
-save_fig <- function(plot, name, dir = path_fig, width = 7, height = 4.5, dpi = 300) {
+#        save_fig(p, "prices_2C", sub = "02_prices", width = 10, height = 6)
+save_fig <- function(plot, name, dir = path_fig, sub = NULL, width = 7, height = 4.5, dpi = 300, pdf = FALSE) {
+  if (!is.null(sub)) dir <- file.path(dir, sub)
   dir.create(dir, showWarnings = FALSE, recursive = TRUE)
-  ggsave(file.path(dir, paste0(name, ".pdf")), plot, width = width, height = height,
-         device = cairo_pdf)
   ggsave(file.path(dir, paste0(name, ".png")), plot, width = width, height = height,
          dpi = dpi, bg = "white")
+  if (pdf) ggsave(file.path(dir, paste0(name, ".pdf")), plot, width = width, height = height, device = cairo_pdf)
   invisible(plot)
 }
