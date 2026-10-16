@@ -76,15 +76,28 @@ sd_rf <- function(X, y, trees = 100, depth = 4, seed = 0, perm = FALSE) {
                       importance = if (perm) "permutation" else "impurity", num.threads = 1)
   imp <- f$variable.importance
   if (!perm) imp <- imp / sum(imp)
-  sort(imp, decreasing = TRUE)
+  imp <- sort(imp, decreasing = TRUE)
+  attr(imp, "oob_error") <- f$prediction.error      # out-of-bag misclassification rate (NOT informative with a 70/30 split: ~0.30 = predict 'other' always)
+  if (!perm) attr(imp, "oob_auc") <- sd_oob_auc(X, y, trees, depth, seed)
+  imp
 }
 
-# CART depth 4 (rpart, no pruning). Leaves: rule, n, n_interest, density, coverage (as in JP tree.py)
-sd_cart <- function(X, y, depth = 4) {
+# Out-of-bag AUC of the forest (0.5 = no skill, 1 = perfect). Use this, not the misclassification rate, to judge
+# whether a forest explains anything: with 30% 'worst' runs a forest can predict 'other' for every run and still score 0.30.
+sd_oob_auc <- function(X, y, trees = 100, depth = 4, seed = 0) {
+  f <- ranger::ranger(x = X, y = factor(y, levels = c(0, 1)), num.trees = trees, max.depth = depth, seed = seed,
+                      probability = TRUE, num.threads = 1)
+  p <- f$predictions[, "1"]; ok <- !is.na(p); p <- p[ok]; yy <- y[ok]
+  n1 <- sum(yy == 1); n0 <- sum(yy == 0)
+  (sum(rank(p)[yy == 1]) - n1 * (n1 + 1) / 2) / (n1 * n0)
+}
+
+# CART depth 4 (rpart, no pruning; leaves have at least `minbucket` runs, so no 1-run 'boxes'). Leaves: rule, n, n_interest, density, coverage (as in JP tree.py)
+sd_cart <- function(X, y, depth = 4, minbucket = 10) {
   d <- data.frame(y = factor(y, levels = c(0, 1)), X, check.names = FALSE)
   names(d) <- c("y", names(X))
   fit <- rpart::rpart(y ~ ., data = d, method = "class",
-                      control = rpart::rpart.control(maxdepth = depth, cp = 0, minsplit = 2, minbucket = 1, xval = 0))
+                      control = rpart::rpart.control(maxdepth = depth, cp = 0, minsplit = 2 * minbucket, minbucket = minbucket, xval = 0))
   fr <- fit$frame; leaf <- rownames(fr)[fr$var == "<leaf>"]
   cnt <- fr[fr$var == "<leaf>", "yval2"][, 2:3, drop = FALSE]    # counts class 0, class 1
   tot1 <- sum(y == 1)
@@ -122,4 +135,39 @@ sd_cluster <- function(M, ind, k = 3, seed = 0, nstart = 25) {
   km <- stats::kmeans(M, centers = k, nstart = nstart)
   ord <- order(sd_adverse(ind, km$centers[, ncol(km$centers)]), decreasing = TRUE)
   list(cluster = stats::setNames(match(km$cluster, ord), rownames(M)), centers = km$centers[ord, , drop = FALSE])
+}
+
+# ---- direction and shape of the effects (block E) ---------------------------------------
+# Spearman correlation of every input with the adversity of the outcome (sd_adverse: larger = worse for households):
+# rho > 0 = a higher value of the input makes the outcome worse. Returns input, rho, p (sorted by |rho|).
+sd_direction <- function(X, adv) {
+  r <- vapply(X, function(v) suppressWarnings(stats::cor.test(v, adv, method = "spearman", exact = FALSE)[c("estimate", "p.value")] |> unlist()), numeric(2))
+  d <- data.frame(input = names(X), rho = unname(r[1, ]), p = unname(r[2, ]))
+  d[order(-abs(d$rho)), ]
+}
+
+# Regression forest on the outcome itself (original units). Used for partial dependence: shape of the effect.
+sd_rf_reg <- function(X, v, trees = 300, seed = 0)
+  ranger::ranger(x = X, y = v, num.trees = trees, min.node.size = 5, seed = seed, num.threads = 1)
+
+# 1-D partial dependence of the fitted forest for `vars`, on a grid between the 5th and 95th percentile of each input.
+sd_pdp <- function(fit, X, vars, n_grid = 20, n_sub = 200, seed = 0) {
+  set.seed(seed); S <- X[sample(nrow(X), min(n_sub, nrow(X))), , drop = FALSE]
+  do.call(rbind, lapply(vars, function(v) {
+    g <- seq(stats::quantile(X[[v]], .05), stats::quantile(X[[v]], .95), length.out = n_grid)
+    pd <- vapply(g, function(x) { S[[v]] <- x; mean(stats::predict(fit, S, num.threads = 1)$predictions) }, numeric(1))
+    data.frame(input = v, x = g, pd = pd)
+  }))
+}
+
+# 2-D partial dependence for a pair of inputs (interaction).
+sd_pdp2 <- function(fit, X, v1, v2, n_grid = 15, n_sub = 150, seed = 0) {
+  set.seed(seed); S <- X[sample(nrow(X), min(n_sub, nrow(X))), , drop = FALSE]
+  g1 <- seq(stats::quantile(X[[v1]], .05), stats::quantile(X[[v1]], .95), length.out = n_grid)
+  g2 <- seq(stats::quantile(X[[v2]], .05), stats::quantile(X[[v2]], .95), length.out = n_grid)
+  grid <- expand.grid(x1 = g1, x2 = g2)
+  grid$pd <- vapply(seq_len(nrow(grid)), function(i) { S[[v1]] <- grid$x1[i]; S[[v2]] <- grid$x2[i]
+    mean(stats::predict(fit, S, num.threads = 1)$predictions) }, numeric(1))
+  grid$var1 <- v1; grid$var2 <- v2
+  grid
 }
