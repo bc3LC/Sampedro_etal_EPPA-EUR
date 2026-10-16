@@ -12,10 +12,12 @@ data/eppa_outputs/
 data/processed/
 data/publication_database/
 data/external/**/WiP/
+data/design/
 
 # Outputs: keep only what you add explicitly
 outputs/figures/*
 outputs/tables/*
+outputs/platform/
 !outputs/figures/.gitkeep
 !outputs/tables/.gitkeep
 
