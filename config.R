@@ -14,6 +14,7 @@ path_eppa    <- file.path(root, "data", "eppa_outputs")
 path_design  <- file.path(root, "data", "design")
 path_bridge  <- file.path(root, "data", "external")
 path_proc    <- file.path(root, "data", "processed")
+path_inputs  <- file.path(path_design, "Inputs_Master.xlsx")   # EPPA uncertain parameters per run (sheet "samples")
 
 # ---- Outputs ------------------------------------------------------------------
 path_fig      <- file.path(root, "outputs", "figures")

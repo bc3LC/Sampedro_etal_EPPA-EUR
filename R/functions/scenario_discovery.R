@@ -15,26 +15,36 @@ sd_target <- function(ind, x, pct = 70) {
 }
 
 # ---- inputs (EPPA uncertain parameters, one row per run) ----------------------------
-# Region filter as in JP analysis/inputs.py: keep {REG}/Non-{REG} TFP and Pop and AEEI {REG};
-# for GLB keep aggregate TFP/Pop and all AEEI columns.
+# Design file = Inputs_Master.xlsx (sheet "samples": row 3 = input names, column 1 = run number, runs 1-400;
+# the percentile rows below the runs are ignored). A csv with 'Run #' + one column per input also works.
+# Region filter (as in JP analysis/inputs.py): keep {REG}/Non-{REG} GDP (or TFP) and Pop and AEEI {REG};
+# for GLB keep the aggregate GDP/TFP/Pop and all AEEI columns. Global parameters (elasticities, fossil
+# resources, technology costs, ...) are always kept.
 sd_input_cols <- function(cols, region = "EUR") {
-  allowed <- if (region == "GLB") c("TFP", "Pop") else
-    c(paste(region, "TFP"), paste0("Non-", region, " TFP"), paste(region, "Pop"), paste0("Non-", region, " Pop"))
-  is_tp   <- grepl("TFP", cols) | grepl(" Pop", cols) | cols == "Pop"
+  allowed <- if (region == "GLB") c("TFP", "GDP", "Pop") else
+    c(paste(region, c("TFP", "GDP", "Pop")), paste0("Non-", region, " ", c("TFP", "GDP", "Pop")))
+  is_reg  <- grepl("(^| )(TFP|GDP|Pop)$", cols)
   is_aeei <- startsWith(cols, "AEEI ")
-  drop <- (is_tp & !cols %in% allowed) | (is_aeei & region != "GLB" & cols != paste("AEEI", region))
+  drop <- (is_reg & !cols %in% allowed) | (is_aeei & region != "GLB" & cols != paste("AEEI", region))
   cols[!drop]
 }
 
-sd_read_inputs <- function(path, region = "EUR") {
-  x <- utils::read.csv(path, check.names = FALSE, fileEncoding = "UTF-8-BOM", stringsAsFactors = FALSE)
-  names(x)[1] <- "run_id"
+sd_read_inputs <- function(path, region = "EUR", sheet = "samples") {
+  if (grepl("\\.xlsx?$", path, ignore.case = TRUE)) {
+    x <- suppressMessages(readxl::read_excel(path, sheet = sheet, col_names = FALSE))
+    nm <- as.character(unlist(x[3, ])); x <- x[-(1:3), ]
+    names(x) <- c("run_id", nm[-1])
+    x <- x[!is.na(suppressWarnings(as.numeric(x$run_id))) & as.numeric(x$run_id) == round(as.numeric(x$run_id)), ]
+    x <- x[, !is.na(names(x)) & names(x) != "NA", drop = FALSE]
+  } else {
+    x <- utils::read.csv(path, check.names = FALSE, fileEncoding = "UTF-8-BOM", stringsAsFactors = FALSE)
+    names(x)[1] <- "run_id"
+  }
   x$run_id <- as.character(as.integer(x$run_id))
-  keep <- sd_input_cols(names(x)[-1], region)
-  x <- x[, c("run_id", keep), drop = FALSE]
-  num <- vapply(x[-1], is.numeric, logical(1))
-  x <- x[, c(TRUE, num), drop = FALSE]
-  x[, c(TRUE, vapply(x[-1], function(v) length(unique(v[!is.na(v)])) > 1, logical(1))), drop = FALSE]
+  x[-1] <- lapply(x[-1], function(v) suppressWarnings(as.numeric(v)))
+  x <- as.data.frame(x[, c("run_id", sd_input_cols(names(x)[-1], region))])
+  x <- x[, c(TRUE, vapply(x[-1], function(v) length(unique(v[!is.na(v)])) > 1, logical(1))), drop = FALSE]
+  x[stats::complete.cases(x), ]
 }
 
 # ---- EPPA sector prices (outputs used for output-output mapping) --------------------
