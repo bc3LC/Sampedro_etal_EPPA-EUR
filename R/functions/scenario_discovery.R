@@ -5,8 +5,10 @@
 # Only definitions here (nothing runs when sourced).
 
 # ---- targets -------------------------------------------------------------------
-# "Adversity": larger = worse for households. DI is a welfare change (negative = loss), EP/TP are rates.
-sd_adverse <- function(ind, x) if (ind == "di") -x else x
+# "Adversity": larger = worse for households. EP/TP are rates.
+# Convention: EP and TP are poverty rates (higher = worse). DI is a welfare change in % (negative = loss), so a larger loss
+# (more negative DI) is worse: adversity = -DI. Switch: options(sd.di_loss_is_negative) (script 03, `di_loss_is_negative`).
+sd_adverse <- function(ind, x) if (ind == "di" && isTRUE(getOption("sd.di_loss_is_negative", TRUE))) -x else x
 
 # 1 = run is in the worst (100 - pct)% of the ensemble for this indicator (JP: threshold 70, gt = TRUE)
 sd_target <- function(ind, x, pct = 70) {
@@ -170,4 +172,47 @@ sd_pdp2 <- function(fit, X, v1, v2, n_grid = 15, n_sub = 150, seed = 0) {
     mean(stats::predict(fit, S, num.threads = 1)$predictions) }, numeric(1))
   grid$var1 <- v1; grid$var2 <- v2
   grid
+}
+
+# ---- filtered mode (block G): joint selection of runs on several outputs ---------------------------------------
+# P: matrix runs x indicators with the ADVERSITY PERCENTILE of each run (0 = best run of the ensemble, 1 = worst), so a
+# bound c(0, .5) always means "the better half", whatever the indicator (DI: smaller loss = better; EP / TP: lower rate = better).
+# case: list(side = "best" | "worst", q = "auto" | number, ind = optional subset of indicators)   -> every indicator in
+#        the best (0, q) / worst (1 - q, 1) fraction, AND-combined; q = "auto" picks q so that about n_target runs are selected;
+#        (q can also be a named vector c(di = .4, ep = .5, tp = .5): a different fraction per indicator)
+#   or list(bounds = list(ep = c(0, .5), tp = c(0, .5)))                                           -> explicit bounds per indicator.
+# Returns list(sel = logical per run, q = q used (NA for explicit bounds), bounds = list).
+sd_filter_select <- function(P, case, n_target = 100) {
+  sel_of <- function(b) { ok <- rep(TRUE, nrow(P)); for (i in names(b)) ok <- ok & P[, i] >= b[[i]][1] & P[, i] <= b[[i]][2]; ok }
+  if (!is.null(case$bounds)) return(list(sel = sel_of(case$bounds), q = NA_real_, bounds = case$bounds))
+  q <- if (is.null(case$q)) "auto" else case$q
+  # q: one number (same fraction for every indicator in `ind`), a named vector c(di = .4, ep = .5, tp = .5) (one fraction per
+  # indicator; the indicators are then the names of q), or "auto"
+  inds <- if (!is.null(names(q))) names(q) else if (is.null(case$ind)) colnames(P) else case$ind
+  bnd <- function(q) {
+    qq <- if (is.null(names(q))) stats::setNames(rep(q, length(inds)), inds) else q
+    stats::setNames(lapply(names(qq), function(i) if (case$side == "best") c(0, qq[[i]]) else c(1 - qq[[i]], 1)), names(qq))
+  }
+  if (identical(q, "auto")) {
+    qs <- seq(.05, .95, by = .01); n <- vapply(qs, function(x) sum(sel_of(bnd(x))), numeric(1))
+    q <- qs[which.min(abs(n - n_target))]
+  }
+  list(sel = sel_of(bnd(q)), q = if (length(q) == 1) unname(q) else NA_real_, bounds = bnd(q))
+}
+
+# Left: top-n importance bars. Right: parallel axes of the top-n inputs + the filtered outputs, selected vs other runs.
+# outs: data.frame, one column per output (named with the label to show on the axis).
+sd_plot_parcoords_multi <- function(X, y, outs, imp, class_labels, top_n = 5, title = NULL, fill = "#0b3d91") {
+  top <- names(imp)[seq_len(min(top_n, length(imp)))]
+  bar <- data.frame(var = factor(top, rev(top)), imp = imp[top])
+  p1 <- ggplot(bar, aes(imp, var)) + geom_col(fill = fill, width = .7) +
+    labs(x = "Feature importance", y = NULL, subtitle = paste("Top", length(top), "features")) + theme_paper(base_size = 10)
+  pc <- data.frame(X[, top, drop = FALSE], outs, check.names = FALSE)
+  pc$grp <- factor(y, c(0, 1), class_labels)
+  p2 <- GGally::ggparcoord(pc, columns = seq_len(ncol(pc) - 1), groupColumn = "grp", scale = "uniminmax",
+                           alphaLines = .35, showPoints = FALSE) +
+    scale_colour_manual(values = c("grey60", "#D55E00"), name = NULL) +
+    labs(x = NULL, y = "Scaled value (min-max)", subtitle = "Parallel axes (inputs and filtered outputs)") + theme_paper(base_size = 10) +
+    theme(axis.text.x = element_text(angle = 25, hjust = 1))
+  patchwork::wrap_plots(p1, p2, widths = c(.4, .6)) + patchwork::plot_annotation(title = title)
 }
