@@ -27,7 +27,7 @@ hbs_year     <- 2015                                  # base HBS (Austria has no
 ensembles    <- c("2C", "1p5C", "Ref", "PF")          # folders of data/eppa_outputs
 years_calc   <- c(2025, 2030, 2035, 2040)             # computed; 2020 = base, 2045-2100 copy 2040
 chunk_size   <- 50                                    # scenarios per chunk
-drop_flagged_scenarios <- FALSE
+drop_flagged_scenarios <- TRUE
 
 # Countries (EU without Austria)
 EU_NO_AT <- c("Belgium", "Bulgaria", "Croatia", "Cyprus", "Czech Republic", "Denmark",
