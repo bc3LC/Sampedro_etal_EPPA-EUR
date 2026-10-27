@@ -19,10 +19,18 @@ Figures are PNG. Scripts with several figures write them into one subfolder per 
 - `decomposition/` (and `decomposition/other/`): output of `R/diag/di_decomposition.R` and the price-debug figures
 - `compare EPPA prices/`: EPPA sector price figures for the EPPA team
 - `03_input_output/`, `03_heatmaps/`, `03_output_output/`, `03_clusters/`: blocks A-D of the scenario discovery
+- `03_direction_pdp/`: block E (direction heatmaps and 1-D / 2-D partial dependence)
+- `03_extreme_cases/`: block F (best and worst runs and their input profiles)
+- `04_filtered_io/`, `04_filtered_cart/`, `04_filtered_runs/`, `04_filtered_direction/`, `04_filtered_common_drivers/`: block G (filtered mode)
+- `diag_hbs_expenditure/`: pie charts of the expenditure structure by country and income quintile (`R/diag/hbs_expenditure_pies.R`)
+
+## Tables
+
+`tables/` has the CSVs behind the figures: `03_importance_inputs.csv` (with `oob_auc`), `03_importance_inputs_by_year.csv`, `03_importance_outputs.csv`, `03_cart_leaves.csv`, `03_cluster_*.csv`, `03_direction_inputs.csv`, `03_pdp_inputs.csv`, `03_extreme_scenarios.csv`, `03_extreme_overlap.csv`, `04_filtered_importance.csv`, `04_filtered_cart_leaves.csv`, `04_filtered_runs.csv`, `04_filtered_direction.csv`, `04_filtered_common_drivers.csv` and `diag_hbs_expenditure_shares.csv`. Old `*_diff` files and the `03_filtered/` folder come from a removed analysis mode and can be deleted.
 
 ## Naming convention
 
-`<script-number>_<short-description>.<ext>`. This makes it clear which script produced each file.
+`<script-number>_<short-description>.<ext>`. This makes it clear which script produced each file. Block G of script 03 uses the prefix `04_`.
 
 ## Tracking
 

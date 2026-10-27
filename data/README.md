@@ -20,6 +20,10 @@ Inputs and intermediate data. Most of this folder is **not tracked by Git** (see
 
 ## Where to get the raw data
 
-- HBS: *(add source, version and access date)*
-- EPPA7 outputs: *(add model version, scenario names, extraction date; Ref ensemble re-extracted in October 2026)*
-- COICOP/CPA mappings: *(add source files)*
+- HBS: This is proprietary data that should be requested to Eurostat.
+
+- EPPA7 outputs: Ensembles re-extracted in October 2026. The details of the scenario ensembles can be found in:
+Morris, J., Sokolov, A., Reilly, J., Libardoni, A., Forest, C., Paltsev, S., Schlosser, C.A., Prinn, R. and Jacoby, H., 2025. Quantifying both socioeconomic and climate uncertainty in coupled human–Earth systems analysis. Nature communications, 16(1), p.2703.
+
+- COICOP/CPA mappings: The COICOP-CPA mapping is based on a bridge matrix published by the JRC, with some own elaborations:
+Ortuzar, Iban;  Pedauga, Luis;  Piñero, Pablo;  Rueda-Cantuche, Jose Manuel (2026): A time-series dataset of CPA–COICOP bridging matrices with household income quintile breakdowns for the EU27 (2010–2023). European Commission, Joint Research Centre [Dataset] doi: 10.2905/JRC.NY6M0T0 PID: http://data.europa.eu/89h/376dbc7d-8093-4288-8fa8-279661428872
