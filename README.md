@@ -25,6 +25,7 @@ EPPA ensembles (400 runs each) -> sector price indices (EUR) -> MEDUSA + HBS 201
 ### Method choices
 
 - HBS 2015 base. Austria is excluded (no 2015 data); Romania is excluded from EP and TP.
+- EPPA fossil fuel prices (coal, gas, refined oil) include the carbon cost passed through to consumers. MEDUSA has no revenue recycling: carbon revenues are not returned to households, so DI and poverty rates do not include any compensation.
 - DI = change in welfare as % of baseline expenditure (negative = loss). The shock is linear in the sector price changes; static budget (no quantity response), full pass-through, district heat not shocked. EU value = household-weighted mean.
 - EP = LIHC, TP = VTU (`config.R`). Poverty thresholds are fixed at the base HBS, so rates change only because costs change.
 - Years computed: 2025, 2030, 2035, 2040. 2020 is the base (from the HBS); 2045-2100 copy 2040 (needed only for the platform tables).
