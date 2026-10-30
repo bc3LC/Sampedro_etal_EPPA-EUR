@@ -2,14 +2,17 @@
 # Standalone: only needs readxl, dplyr, tidyr, ggplot2. Reads data/eppa_outputs/<ens>/*.xlsx
 # (sheet pol_EUR; Ref: ref_EUR). Rows = scenarios, columns = years, 2020 = 1.
 suppressPackageStartupMessages({library(readxl); library(dplyr); library(tidyr); library(ggplot2)})
+if (file.exists("config.R")) source("config.R")
 
 eppa_dir <- if (exists("path_data")) file.path(path_data, "eppa_outputs") else "data/eppa_outputs"
-out_dir  <- if (exists("path_fig"))  file.path(path_fig, "diag") else "outputs/figures/diag"
-dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+out_dir  <- if (exists("path_fig"))  file.path(path_fig, "0_eppa_prices") else "outputs/figures/0_eppa_prices"
+tab_dir  <- if (exists("path_tab"))  path_tab else "outputs/tables"
+dir.create(out_dir, recursive = TRUE, showWarnings = FALSE); dir.create(tab_dir, recursive = TRUE, showWarnings = FALSE)
 
 ens  <- c("2C", "1p5C", "PF", "Ref")
 yrs  <- c(2020, 2025, 2030, 2035, 2040)
-secs <- c(elec="Electricity", gas="Gas", coal="Coal", oil="Crude oil", roil="Refined oil",
+secs <- c(elec="Electricity", gas="Gas", coal="Coal", roil="Refined oil",   # crude oil ("oil") left out: it is not used by MEDUSA
+
           tran="Transport", serv="Services", eint="Energy-intensive industry",
           othr="Other industry", food="Food", crop="Crops", live="Livestock", fors="Forestry")
 
@@ -56,5 +59,5 @@ p <- ggplot(summ, aes(year)) +
        subtitle = "Median across scenarios; band = 10th-90th percentile (policy ensembles); Ref dashed (median)") +
   theme_minimal(base_size = 10) + theme(legend.position = "bottom", panel.grid.minor = element_blank(),
                                         strip.text = element_text(face = "bold", hjust = 0))
-ggsave(file.path(out_dir, "eppa_prices_EUR_compare.png"), p, width = 13, height = 9, dpi = 200, bg = "white")
-write.csv(summ, file.path(out_dir, "eppa_prices_EUR_compare.csv"), row.names = FALSE)
+ggsave(file.path(out_dir, "eppa_prices_EUR_compare.png"), p, width = 13, height = 7.5, dpi = 200, bg = "white")
+write.csv(summ, file.path(tab_dir, "diag_eppa_prices_EUR_compare.csv"), row.names = FALSE)

@@ -7,11 +7,11 @@
 # with the exposure A[c, country] = sum_h w_h * exp_hc / CP00_h / sum_h w_h. It reproduces
 # medusa::di_total_eu() exactly (checked below), and splits DI by commodity group.
 #
-# Outputs (outputs/tables/, outputs/figures/diag/):
+# Outputs (outputs/tables/, outputs/figures/0_decomposition/):
 #   diag_di_by_variant.csv        DI per ensemble, year, scenario and price assumption
 #   diag_di_contrib_by_group.csv  DI split by commodity group (percentage points), per scenario
 #   diag_di_decomposition.png / diag_di_variants.png
-# Run from the project root. Takes ~1 min per ensemble (shocks of 4 years).
+# Run from the project root, AFTER screen_scenarios.R (the figures drop the flagged scenarios). Needs only the prices and the HBS (not 01_run_medusa.R).
 # ==============================================================================
 source(here::here("config.R"))
 devtools::load_all(path_medusa)
@@ -111,7 +111,7 @@ p1 <- ggplot() +
   facet_wrap(~ ensemble, nrow = 1, labeller = labeller(ensemble = ens_lab)) +
   labs(x = NULL, y = "Contribution to DI (percentage points)", fill = NULL,
        caption = "Bars: median contribution of each commodity group; line: median total DI.") + theme_paper()
-save_fig(p1, "diag_di_decomposition", sub = "diag", width = 11, height = 4.2)
+save_fig(p1, "diag_di_decomposition", sub = "0_decomposition", width = 11, height = 4.2)
 
 vlab <- c(baseline = "Baseline", energy_only = "Energy prices only", nonenergy_only = "Non-energy prices only",
           numeraire_neutral = "Relative prices (shocks / non-energy index)", gas_solid_fixed = "Gas and solid fuels unchanged")
@@ -124,7 +124,7 @@ p2 <- ggplot(d2, aes(year, di, colour = variant, linetype = variant)) + geom_lin
   scale_linetype_manual(values = c(1, 1, 1, 1, 2)) +
   labs(x = NULL, y = "Median DI (% of expenditure)", colour = NULL, linetype = NULL) +
   theme_paper() + guides(colour = guide_legend(nrow = 2))
-save_fig(p2, "diag_di_variants", sub = "diag", width = 11, height = 4.6)
+save_fig(p2, "diag_di_variants", sub = "0_decomposition", width = 11, height = 4.6)
 
 # ==============================================================================
 # By EPPA sector (and services by COICOP division)
@@ -179,7 +179,7 @@ p3 <- ggplot() + geom_col(data = d3, aes(year, pp, fill = sector), width = 3.2) 
   facet_wrap(~ ensemble, nrow = 1, labeller = labeller(ensemble = ens_lab)) +
   labs(x = NULL, y = "Contribution to DI (percentage points)", fill = NULL,
        caption = "Median across scenarios; line: median total DI.") + theme_paper()
-save_fig(p3, "diag_di_by_eppa_sector", sub = "diag", width = 11, height = 4.6)
+save_fig(p3, "diag_di_by_eppa_sector", sub = "0_decomposition", width = 11, height = 4.6)
 
 div_lab <- c("01" = "Food & non-alc. beverages", "02" = "Alcohol & tobacco", "03" = "Clothing", "04" = "Housing, water, energy",
              "05" = "Furnishings", "06" = "Health", "07" = "Transport", "08" = "Communication", "09" = "Recreation",
@@ -191,5 +191,5 @@ p4 <- ggplot(d4, aes(year, pp, fill = division)) + geom_col(width = 3.2) + geom_
   facet_wrap(~ ensemble, nrow = 1, labeller = labeller(ensemble = ens_lab)) +
   labs(x = NULL, y = "Services contribution to DI (percentage points)", fill = NULL) + theme_paper() +
   guides(fill = guide_legend(nrow = 3))
-save_fig(p4, "diag_di_services_by_coicop_division", sub = "diag", width = 11, height = 5)
+save_fig(p4, "diag_di_services_by_coicop_division", sub = "0_decomposition", width = 11, height = 5)
 message("di_decomposition.R finished")

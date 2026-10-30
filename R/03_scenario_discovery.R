@@ -27,6 +27,7 @@ sc_region   <- "EUR"          # region used to filter TFP / Pop / AEEI columns o
 sc_year     <- 2030           # main year for blocks A, C and the cluster outputs
 sc_years    <- years_calc     # years of the heatmap (2020 is the base: no variance)
 di_loss_is_negative <- TRUE   # DI = welfare change in %: negative = loss, so -4% is worse than -2%. (EP, TP: higher rate = worse)
+min_perm_imp <- 0.005   # filtered-mode parallel axes: show only inputs whose permutation importance exceeds this (at least 2 shown)
 options(sd.di_loss_is_negative = di_loss_is_negative)
 adverse_pct <- 70             # class 1 = worst (100 - 70)% of runs
 n_trees     <- 100; rf_depth <- 4; cart_depth <- 4; cart_minbucket <- 10; top_n <- 5; rf_seed <- 0
@@ -137,6 +138,21 @@ if (run_B) {
       labs(x = NULL, y = NULL, title = sprintf("RF feature importance of EPPA inputs, %s%s", sc_region, mode_lab(md))) +
       theme_paper(base_size = 9) + theme(panel.grid = element_blank(), legend.position = "right")
     save_fig(p, paste0("03_heatmap_inputs", mode_sfx(md)), sub = "03_heatmaps", width = if (md == "diff") 9.5 else 12, height = 8.5)
+    # one heatmap per ensemble: own top inputs and own colour scale, so the ensemble with the largest importances (e.g. 1p5C) does not wash out the others
+    for (e in ens) {
+      he <- hb |> filter(ensemble == e)
+      tope <- he |> group_by(indicator, input) |> summarise(s = sum(importance), .groups = "drop") |>
+        group_by(indicator) |> slice_max(s, n = top_n, with_ties = FALSE) |> ungroup() |> select(indicator, input)
+      hpe <- inner_join(he, tope, by = c("indicator", "input")) |> mutate(indicator = factor(indicator, names(ind_lab), ind_lab))
+      pe <- ggplot(hpe, aes(factor(year), input, fill = importance)) + geom_tile(colour = "white") +
+        geom_text(aes(label = sprintf("%.2f", importance)), size = 2.4) +
+        facet_grid(indicator ~ ., scales = "free_y", switch = "y") +
+        scale_fill_gradient(low = "white", high = "#0b3d91", limits = c(0, NA), name = "RF\nimportance") +
+        labs(x = NULL, y = NULL, title = sprintf("RF feature importance of EPPA inputs, %s, %s%s", sc_region, e, mode_lab(md)),
+             subtitle = "Top inputs per metric for this ensemble; colour scale specific to this ensemble") +
+        theme_paper(base_size = 9) + theme(panel.grid = element_blank(), legend.position = "right", strip.placement = "outside")
+      save_fig(pe, sprintf("03_heatmap_inputs_%s%s", e, mode_sfx(md)), sub = "03_heatmaps", width = 6.5, height = 7.5)
+    }
   }
   write.csv(bind_rows(hb_all), file.path(path_tab, "03_importance_inputs_by_year.csv"), row.names = FALSE)
 }
@@ -250,6 +266,7 @@ if (run_E) {
       key <- paste(e, ind)
       imp <- sd_rf(a$X, a$y, n_trees, rf_depth, rf_seed)
       dd <- sd_direction(a$X, sd_adverse(ind, a$value))
+      dd <- bind_rows(dd, cbind(metric = "selected", sd_direction(X, y)))     # rho between each input and membership of the selected set (case-specific)
       dd$importance <- as.numeric(imp[dd$input])
       dir_all[[paste(md, key)]] <- cbind(target = md, ensemble = e, indicator = ind, year = sc_year, dd)
       fits[[key]] <- list(fit = sd_rf_reg(a$X, a$value, seed = rf_seed), X = a$X, imp = imp)
@@ -274,7 +291,7 @@ if (run_E) {
       ks <- paste(ens, ind); ks <- ks[ks %in% names(fits)]; if (!length(ks)) next
       vars <- unique(unlist(lapply(ks, function(k) names(fits[[k]]$imp)[seq_len(pdp_top)])))
       pd <- bind_rows(lapply(ks, function(k) cbind(ensemble = sub(" .*", "", k),
-                                                  sd_pdp(fits[[k]]$fit, fits[[k]]$X, vars))))
+                                                   sd_pdp(fits[[k]]$fit, fits[[k]]$X, vars))))
       pdp_all[[paste(md, ind)]] <- cbind(target = md, indicator = ind, year = sc_year, pd)
       p2 <- ggplot(mutate(pd, ensemble = factor(ensemble, ens), input = factor(input, vars)), aes(x, pd, colour = ensemble)) +
         geom_line(linewidth = .9) + facet_wrap(~input, scales = "free_x") +
@@ -324,7 +341,7 @@ if (run_F) {
         n_in <- table(factor(unlist(grp_ind), levels = unique(A[[1]]$run_id)))
         all3 <- names(n_in)[n_in == length(ind_lab)]
         ovl_tab[[paste(cs, md, e)]] <- data.frame(case = cs, target = md, ensemble = e, year = sc_year, extreme_pct = extreme_pct,
-          n_group = n_grp(A[[1]]), n_in_1 = sum(n_in >= 1), n_in_2 = sum(n_in >= 2), n_in_all = length(all3), runs_in_all = paste(all3, collapse = " "))
+                                                  n_group = n_grp(A[[1]]), n_in_1 = sum(n_in >= 1), n_in_2 = sum(n_in >= 2), n_in_all = length(all3), runs_in_all = paste(all3, collapse = " "))
         for (ind in names(ind_lab)) {
           a <- A[[ind]]; if (nrow(a$X) < 50) next
           adv <- sg * sd_adverse(ind, a$value)               # larger = more extreme in the chosen direction
@@ -351,8 +368,8 @@ if (run_F) {
         if (length(pan))
           save_fig(patchwork::wrap_plots(pan, nrow = 1, guides = "collect") +
                      patchwork::plot_annotation(title = sprintf("%s-case scenarios, %s%s, %d", tools::toTitleCase(cs), e, mode_lab(md), sc_year),
-                       subtitle = sprintf("Rows: runs ranked from the %s (%s). Colour: input value as percentile of the ensemble (red = high, blue = low)",
-                                          cs, if (cs == "best") "smallest DI loss / lowest poverty" else "largest DI loss / highest poverty")),
+                                                subtitle = sprintf("Rows: runs ranked from the %s (%s). Colour: input value as percentile of the ensemble (red = high, blue = low)",
+                                                                   cs, if (cs == "best") "smallest DI loss / lowest poverty" else "largest DI loss / highest poverty")),
                    sprintf("03_%s_runs_%s_%d%s", cs, e, sc_year, sfx), sub = "03_extreme_cases", width = 15, height = 1.6 + 0.3 * extreme_n)
       }
       pf <- bind_rows(prof)
@@ -431,11 +448,17 @@ if (run_G) {
       com_G[[paste(key, "case")]] <- data.frame(target = md, ensemble = e, year = yr, column = cs, input = names(imp), importance = as.numeric(imp))
       # direction of each input on DI, EP, TP and the combined score
       dd <- bind_rows(lapply(names(met_lab), function(k) cbind(metric = k, sd_direction(X, if (k == "combined") comb else sd_adverse(k, D[[k]])))))
+      dd <- bind_rows(dd, cbind(metric = "selected", sd_direction(X, y)))     # rho between each input and membership of the selected set (case-specific)
       dd$importance <- as.numeric(imp[dd$input])
       dir_G[[key]] <- cbind(target = md, ensemble = e, case = cs, year = yr, dd)
       # (1) importance + parallel axes, CART
-      outs <- D[, names(ind_lab)]; names(outs) <- unname(ind_lab[names(ind_lab)])
-      p <- sd_plot_parcoords_multi(X, y, outs, imp, c("Other runs", "Selected runs"), top_n,
+      outs <- D[, names(ind_lab)]
+      if (di_loss_is_negative && "di" %in% names(outs)) outs$di <- -outs$di          # DI shown as a loss: higher = worse on all three axes
+      names(outs) <- unname(ind_lab[names(ind_lab)])
+      if (di_loss_is_negative && "di" %in% names(ind_lab)) names(outs)[names(ind_lab) == "di"] <- "DI loss"
+      keep <- names(imp)[!is.na(perm[names(imp)]) & perm[names(imp)] > min_perm_imp]   # only inputs with a non-negligible permutation importance
+      if (length(keep) < 2) keep <- names(imp)[1:2]
+      p <- sd_plot_parcoords_multi(X, y, outs, imp[keep], c("Other runs", "Selected runs"), top_n,
                                    title = sprintf("Filtered mode: %s, %s%s, %d (%d of %d runs selected)", cs, e, mode_lab(md), yr, n_sel, length(y)),
                                    fill = "#6929c4")
       save_fig(p, sprintf("04_filt_%s_%s_%d%s", slug(cs), e, yr, mode_sfx(md)), sub = "04_filtered_io", width = 11, height = 4.8)
@@ -459,22 +482,42 @@ if (run_G) {
                sprintf("04_filt_runs_%s_%s_%d%s", slug(cs), e, yr, mode_sfx(md)), sub = "04_filtered_runs", width = 8, height = 1.6 + 0.3 * extreme_n)
     }
   }
-  # (3) direction heatmap per case, year and mode: panels = ensembles, columns = DI, EP, TP, Combined
+  # (3) direction heatmap, ONE figure per year and mode: panels = metric (DI loss, EP, TP, combined), columns = ensembles.
+  #     rho does not depend on the case (it is computed on the whole ensemble), so cases are not faceted; they only choose which inputs to show.
   dir_all <- bind_rows(dir_G)
-  for (md in unique(dir_all$target)) for (yr in unique(dir_all$year)) for (cs in unique(dir_all$case)) {
-    dd <- dir_all |> filter(target == md, year == yr, case == cs); if (!nrow(dd)) next
+  for (md in unique(dir_all$target)) for (yr in unique(dir_all$year)) {
+    dd <- dir_all |> filter(target == md, year == yr, metric != "selected"); if (!nrow(dd)) next
     ens <- unique(dd$ensemble)
-    dd <- dd |> filter(metric == "combined")
-    tp <- dd |> group_by(ensemble) |> slice_max(importance, n = top_n, with_ties = FALSE) |> ungroup() |> distinct(input)
-    hp <- inner_join(dd, tp, by = "input") |> mutate(ensemble = factor(ensemble, ens), star = ifelse(p < 0.01, "*", ""))
-    hp$input <- reorder(hp$input, hp$importance, FUN = max)
+    tp <- dd |> filter(metric == "combined") |> group_by(ensemble, case) |> slice_max(importance, n = top_n, with_ties = FALSE) |> ungroup() |> distinct(input)
+    mets <- c(di = "DI loss", ep = "EP", tp = "TP", combined = "Combined")
+    hp <- inner_join(dd |> distinct(target, ensemble, year, metric, input, rho, p), tp, by = "input") |>
+      mutate(ensemble = factor(ensemble, ens), metric = factor(mets[metric], mets), star = ifelse(p < 0.01, "*", ""))
+    ord <- hp |> filter(metric == "Combined") |> group_by(input) |> summarise(m = max(abs(rho)), .groups = "drop")
+    hp$input <- factor(hp$input, ord$input[order(ord$m)])
     g <- ggplot(hp, aes(ensemble, input, fill = rho)) + geom_tile(colour = "white") +
-      geom_text(aes(label = sprintf("%.2f%s", rho, star)), size = 2.8) +
+      geom_text(aes(label = sprintf("%.2f%s", rho, star)), size = 2.6) + facet_wrap(~metric, nrow = 1) +
       scale_fill_gradient2(low = "#2166ac", mid = "white", high = "#b2182b", midpoint = 0, limits = c(-1, 1) * max(abs(hp$rho)), name = "Spearman\nrho") +
-      labs(x = NULL, y = NULL, title = sprintf("Direction of the input effects on the overall outcome: %s, %d%s", cs, yr, mode_lab(md)),
-           subtitle = "Inputs: top by importance for the selection. Red: a higher input value worsens the overall outcome (larger DI loss, higher EP and TP); blue: improves it. * p < 0.01") +
+      labs(x = NULL, y = NULL, title = sprintf("Direction of the input effects, %d%s", yr, mode_lab(md)),
+           subtitle = "Rows: union of the top inputs by importance across ensembles and cases. Red: a higher input value worsens the outcome (larger DI loss, higher EP, TP); blue: improves it. * p < 0.01") +
       theme_paper(base_size = 9) + theme(panel.grid = element_blank())
-    save_fig(g, sprintf("04_filt_direction_%s_%d%s", slug(cs), yr, mode_sfx(md)), sub = "04_filtered_direction", width = 4 + 1.2 * length(ens), height = 4.5)
+    save_fig(g, sprintf("04_filt_direction_metrics_%d%s", yr, mode_sfx(md)), sub = "04_filtered_direction", width = 3 + 1.0 * length(ens) * length(mets), height = 2 + 0.3 * nlevels(hp$input))
+  }
+  # (3b) direction by case: panels = cases, columns = ensembles; fill = Spearman rho between the input and being in the selected set
+  #      (red: a higher input value makes a run MORE likely to be selected; blue: less likely). Best and Worst are roughly mirror images by construction.
+  for (md in unique(dir_all$target)) for (yr in unique(dir_all$year)) {
+    dd <- dir_all |> filter(target == md, year == yr, metric == "selected"); if (!nrow(dd)) next
+    ens <- unique(dd$ensemble); cases <- unique(dd$case)
+    tp <- dd |> group_by(ensemble, case) |> slice_max(importance, n = top_n, with_ties = FALSE) |> ungroup() |> distinct(input)
+    hp <- inner_join(dd, tp, by = "input") |> mutate(ensemble = factor(ensemble, ens), case = factor(case, cases), star = ifelse(p < 0.01, "*", ""))
+    ord <- hp |> group_by(input) |> summarise(m = max(importance), .groups = "drop")
+    hp$input <- factor(hp$input, ord$input[order(ord$m)])
+    g <- ggplot(hp, aes(ensemble, input, fill = rho)) + geom_tile(colour = "white") +
+      geom_text(aes(label = sprintf("%.2f%s", rho, star)), size = 2.8) + facet_wrap(~case, nrow = 1) +
+      scale_fill_gradient2(low = "#2166ac", mid = "white", high = "#b2182b", midpoint = 0, limits = c(-1, 1) * max(abs(hp$rho)), name = "Spearman rho\n(with selection)") +
+      labs(x = NULL, y = NULL, title = sprintf("Direction of the input effects on being selected, %d%s", yr, mode_lab(md)),
+           subtitle = "Rows: union of the top inputs by importance across ensembles and cases. Red: a higher input value makes a run more likely to be in the selected set; blue: less likely. * p < 0.01") +
+      theme_paper(base_size = 9) + theme(panel.grid = element_blank())
+    save_fig(g, sprintf("04_filt_direction_cases_%d%s", yr, mode_sfx(md)), sub = "04_filtered_direction", width = 3 + 1.1 * length(ens) * length(cases), height = 2 + 0.3 * nlevels(hp$input))
   }
   # (4) inputs that matter for all three metrics: RF importance for DI, EP, TP (worst adverse_pct %) and for each case
   com_all <- bind_rows(com_G)

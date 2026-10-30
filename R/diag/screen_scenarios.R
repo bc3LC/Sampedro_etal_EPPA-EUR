@@ -6,10 +6,12 @@
 path_medusa <- "C:/Users/Jon Sampedro/Desktop/medusa"
 devtools::load_all(path_medusa)
 source("R/functions/run_ensemble.R"); source("config.R")
+for (f in list.files("R/functions", pattern = "\\.R$", full.names = TRUE)) source(f)   # plot_helpers (theme_paper, save_fig)
+suppressPackageStartupMessages({ library(dplyr); library(ggplot2) })
 suppressMessages({ hbs <- readRDS("data/processed/hbs_2015_clean.rds") })
 hbs_codes <- grep("^CP", names(hbs), value = TRUE)
 yrs <- c(2025, 2030, 2035, 2040)
-ne_lo <- 0.90; ne_hi <- 1.15; ne_jump <- 0.10
+ne_lo <- 0.90; ne_hi <- 1.15; ne_jump <- 0.10   # thresholds: adjust after looking at the distribution
 
 cw <- tapply(hbs$weight * hbs$CP00, hbs$country, sum); cw <- cw / sum(cw)
 
@@ -30,9 +32,11 @@ for (ens in ensembles) {
   for (yr in yrs) {
     M <- one_year(ens, yr)
     ne <- !grepl("^CP045|^CP0722", rownames(M))
-    sh_ne <- colSums(hbs$weight * as.matrix(hbs[, rownames(M)[ne]])) / sum(hbs$weight * hbs$CP00)
-    ne_f  <- agg(colSums(M[ne, , drop = FALSE] * sh_ne) / sum(sh_ne), M)
-    fuel  <- agg(M["CP0722", ], M)
+    sc <- sub(".*_", "", colnames(M))
+    cols <- split(seq_len(ncol(M)), sc)
+    # median shock over non-energy codes and countries, and over countries for transport fuels
+    ne_f <- vapply(cols, function(j) median(M[ne, j]), numeric(1))
+    fuel <- vapply(cols, function(j) median(M["CP0722", j]), numeric(1))
     d <- data.frame(ensemble = ens, year = yr, run_id = names(ne_f), ne_factor = as.numeric(ne_f),
                     fuel_factor = as.numeric(fuel[names(ne_f)]))
     if (!is.null(prev)) {
@@ -57,3 +61,30 @@ drop <- unique(scr[scr$flag, c("ensemble", "run_id")])
 cat("\nScenarios to drop per ensemble:\n"); print(table(drop$ensemble))
 saveRDS(scr, "data/processed/screening_table.rds")
 saveRDS(drop, "data/processed/flagged_scenarios.rds")
+
+# ---- figures (outputs/figures/0_outliers/) -------------------------------------------------------------------
+# Flagged scenarios in red, all others in grey; dashed lines = the thresholds of the screening rules.
+ens_order <- ensembles
+scr$ensemble <- factor(scr$ensemble, ens_order)
+scr$flagged_run <- paste(scr$ensemble, scr$run_id) %in% paste(drop$ensemble, drop$run_id)
+fig_dir <- file.path(path_fig, "0_outliers"); dir.create(fig_dir, showWarnings = FALSE, recursive = TRUE)
+traj <- function(col, ylab, title, hl = NULL) {
+  p <- ggplot(scr, aes(year, .data[[col]], group = run_id)) +
+    geom_line(data = ~filter(.x, !flagged_run), colour = "grey70", alpha = .35, linewidth = .3) +
+    geom_line(data = ~filter(.x, flagged_run), colour = "#b2182b", linewidth = .5) +
+    facet_wrap(~ensemble, nrow = 1) + scale_x_continuous(breaks = yrs) +
+    labs(x = NULL, y = ylab, title = title, subtitle = sprintf("Red: flagged scenarios (%d). Grey: all others", nrow(drop))) + theme_paper()
+  if (!is.null(hl)) p <- p + geom_hline(yintercept = hl, linetype = "dashed", colour = "grey30", linewidth = .3)
+  p
+}
+save_fig(traj("ne_factor", "Non-energy price factor", "Screening: non-energy price factor", c(ne_lo, ne_hi)),
+         "outliers_price_non_energy", sub = "0_outliers", width = 12, height = 4)
+save_fig(traj("fuel_factor", "Transport fuel price factor", "Screening: transport fuel price factor"),
+         "outliers_price_transport_fuel", sub = "0_outliers", width = 12, height = 4)
+dist <- ggplot(scr, aes(factor(year), ne_factor, colour = flagged_run)) + geom_jitter(width = .25, size = .6, alpha = .6) +
+  geom_hline(yintercept = c(ne_lo, ne_hi), linetype = "dashed", colour = "grey30", linewidth = .3) +
+  scale_colour_manual(values = c("grey60", "#b2182b"), labels = c("Kept", "Flagged"), name = NULL) +
+  facet_wrap(~ensemble, nrow = 1) + labs(x = NULL, y = "Non-energy price factor", title = "Screening: distribution of the non-energy price factor") + theme_paper()
+save_fig(dist, "outliers_non_energy_distribution", sub = "0_outliers", width = 12, height = 4)
+write.csv(drop, file.path(path_tab, "diag_flagged_scenarios.csv"), row.names = FALSE)
+message("screen_scenarios.R: figures in ", fig_dir)
